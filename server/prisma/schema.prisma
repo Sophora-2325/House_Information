@@ -1,0 +1,132 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  DELETING
+}
+
+enum PublisherRole {
+  OWNER
+  AGENT
+}
+
+enum ListingStatus {
+  draft
+  pending_review
+  published
+  paused
+  sold
+  expired
+  rejected
+  removed
+}
+
+model User {
+  id        String     @id @default(uuid()) @db.Uuid
+  phone     String     @unique @db.VarChar(20)
+  nickname  String?    @db.VarChar(40)
+  role      UserRole   @default(USER)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  listings  Listing[]
+  favorites Favorite[]
+
+  @@map("users")
+}
+
+model Listing {
+  id            String        @id @default(uuid()) @db.Uuid
+  code          String        @unique @db.VarChar(20)
+  publisherId   String        @db.Uuid
+  publisherRole PublisherRole @default(OWNER)
+  /// 草稿阶段以下房屋字段可为空，提交审核时由服务端校验必填
+  city          String?       @db.VarChar(20)
+  district      String?       @db.VarChar(20)
+  community     String?       @db.VarChar(60)
+  highlight     String?       @db.VarChar(30)
+  areaSqm       Decimal?      @db.Decimal(8, 2)
+  rooms         String?       @db.VarChar(20)
+  floor         Int?
+  totalFloors   Int?
+  /// 出售总价，单位万元
+  priceWan      Decimal?      @db.Decimal(10, 2)
+  decoration    String?       @db.VarChar(20)
+  orientation   String?       @db.VarChar(20)
+  description   String?       @db.VarChar(500)
+  status        ListingStatus @default(draft)
+  rejectReason  String?       @db.VarChar(200)
+  submittedAt   DateTime?
+  publishedAt   DateTime?
+  confirmedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  publisher  User               @relation(fields: [publisherId], references: [id])
+  images     ListingImage[]
+  statusLogs ListingStatusLog[]
+  favorites  Favorite[]
+
+  @@index([status, confirmedAt])
+  @@index([district])
+  @@index([priceWan])
+  @@index([areaSqm])
+  @@index([publisherId])
+  @@map("listings")
+}
+
+model ListingImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  listingId  String   @db.Uuid
+  storageKey String   @db.VarChar(300)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, sortOrder])
+  @@map("listing_images")
+}
+
+model ListingStatusLog {
+  id         String         @id @default(uuid()) @db.Uuid
+  listingId  String         @db.Uuid
+  fromStatus ListingStatus?
+  toStatus   ListingStatus
+  operatorId String?        @db.Uuid
+  note       String?        @db.VarChar(200)
+  createdAt  DateTime       @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+  @@map("listing_status_logs")
+}
+
+model Favorite {
+  userId    String   @db.Uuid
+  listingId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+  @@map("favorites")
+}
